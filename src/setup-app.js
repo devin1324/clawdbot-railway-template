@@ -100,8 +100,17 @@
       telegramToken: document.getElementById('telegramToken').value,
       discordToken: document.getElementById('discordToken').value,
       slackBotToken: document.getElementById('slackBotToken').value,
-      slackAppToken: document.getElementById('slackAppToken').value
+      slackAppToken: document.getElementById('slackAppToken').value,
+      pumbleApiKey: document.getElementById('pumbleApiKey').value,
+      pumbleWebhookUrl: document.getElementById('pumbleWebhookUrl').value
     };
+
+    // Display webhook endpoint URL for Pumble configuration
+    var webhookEndpoint = window.location.origin + '/webhooks/pumble';
+    var pumbleEndpointEl = document.getElementById('pumbleWebhookEndpoint');
+    if (pumbleEndpointEl) {
+      pumbleEndpointEl.textContent = webhookEndpoint;
+    }
 
     logEl.textContent = 'Running...\n';
 

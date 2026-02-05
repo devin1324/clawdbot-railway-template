@@ -349,6 +349,22 @@ app.get("/setup", requireSetupAuth, (_req, res) => {
 
     <label>Slack app token (optional)</label>
     <input id="slackAppToken" type="password" placeholder="xapp-..." />
+
+    <h3 style="margin-top: 1.5rem">Pumble (optional)</h3>
+
+    <label>Pumble API key (optional)</label>
+    <input id="pumbleApiKey" type="password" placeholder="Generate via /api-keys generate" />
+    <div class="muted" style="margin-top: 0.25rem">
+      In Pumble, run <code>/api-keys generate</code> command to get your API key.<br/>
+      Then copy the key from the ephemeral message.
+    </div>
+
+    <label>Pumble outgoing webhook URL (optional)</label>
+    <input id="pumbleWebhookUrl" type="password" placeholder="https://webhook.pumble.com/..." />
+    <div class="muted" style="margin-top: 0.25rem">
+      Create an incoming webhook in Pumble workspace settings for sending messages.<br/>
+      <strong>After setup:</strong> Configure Pumble addon webhook to point to: <code id="pumbleWebhookEndpoint" style="background:#fffacd">(will display after setup)</code>
+    </div>
   </div>
 
   <div class="card">
@@ -605,6 +621,36 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
         const get = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", "channels.slack"]));
         extra += `\n[slack config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
         extra += `\n[slack verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
+      }
+    }
+
+    if (payload.pumbleApiKey?.trim()) {
+      if (!supports("pumble")) {
+        extra += "\n[pumble] skipped (this openclaw build does not list pumble in `channels add --help`)\n";
+      } else {
+        const apiKey = payload.pumbleApiKey.trim();
+        const webhookUrl = payload.pumbleWebhookUrl?.trim();
+        const railwayWebhookUrl = `https://${req.headers.host}/webhooks/pumble`;
+
+        const cfgObj = {
+          enabled: true,
+          apiKey,
+          webhookUrl: webhookUrl || undefined,
+          railwayWebhookUrl,
+          dmPolicy: "pairing",
+          groupPolicy: "allowlist",
+          requireMention: true,
+          streamMode: "final",
+        };
+
+        const set = await runCmd(
+          OPENCLAW_NODE,
+          clawArgs(["config", "set", "--json", "channels.pumble", JSON.stringify(cfgObj)]),
+        );
+        const get = await runCmd(OPENCLAW_NODE, clawArgs(["config", "get", "channels.pumble"]));
+        extra += `\n[pumble config] exit=${set.code} (output ${set.output.length} chars)\n${set.output || "(no output)"}`;
+        extra += `\n[pumble verify] exit=${get.code} (output ${get.output.length} chars)\n${get.output || "(no output)"}`;
+        extra += `\n[pumble] Configure webhook in Pumble to: ${railwayWebhookUrl}`;
       }
     }
 
@@ -940,6 +986,18 @@ const proxy = httpProxy.createProxyServer({
 
 proxy.on("error", (err, _req, _res) => {
   console.error("[proxy]", err);
+});
+
+// Pumble webhook endpoint (must be before catch-all proxy)
+app.post("/webhooks/pumble", express.json(), async (req, res) => {
+  try {
+    const pumbleWebhook = require("./pumble/webhook-handler");
+    const result = await pumbleWebhook.handleWebhook(req.body, OPENCLAW_GATEWAY_TOKEN);
+    res.status(result.ok ? 200 : 500).json(result);
+  } catch (err) {
+    console.error("[pumble-webhook] Error:", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 app.use(async (req, res) => {
